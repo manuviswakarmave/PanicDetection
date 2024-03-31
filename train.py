@@ -1,74 +1,64 @@
 import os
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+import cv2
+import numpy as np
+from sklearn import svm
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+import joblib
 
-# Define directories
-train_dir = 'data/train'
-val_dir = 'data/validation'
-output_dir = 'output'
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+# Load motion information images
+motion_images_folder = 'motion_images'
+X_motion = []
+y_labels = []
 
-# Define image dimensions and batch size
-img_width, img_height = 224, 224
-batch_size = 32
+for filename in os.listdir(motion_images_folder):
+    if filename.endswith('.jpg'):
+        motion_image = cv2.imread(os.path.join(motion_images_folder, filename), cv2.IMREAD_GRAYSCALE)
+        # Resize the images to match expected input shape
+        motion_image = cv2.resize(motion_image, (640, 360))
+        # Expand dimensions to add channel dimension
+        motion_image = np.expand_dims(motion_image, axis=-1)
+        X_motion.append(motion_image)
+        if "panic" in filename:
+            y_labels.append(1)
+        else:
+            y_labels.append(0)
 
-# Data Augmentation
-train_datagen = ImageDataGenerator(
-    rescale=1./255,
-    rotation_range=20,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    shear_range=0.2,
-    zoom_range=0.2,
-    horizontal_flip=True,
-    fill_mode='nearest'
-)
+X_motion = np.array(X_motion)
+y_labels = np.array(y_labels)
 
-val_datagen = ImageDataGenerator(rescale=1./255)
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X_motion, y_labels, test_size=0.2, random_state=42)
 
-# Generate image batches
-train_generator = train_datagen.flow_from_directory(
-    train_dir,
-    target_size=(img_width, img_height),
-    batch_size=batch_size,
-    class_mode='binary'
-)
+# Feature extraction using a CNN model
+input_shape = X_train[0].shape
 
-val_generator = val_datagen.flow_from_directory(
-    val_dir,
-    target_size=(img_width, img_height),
-    batch_size=batch_size,
-    class_mode='binary'
-)
-
-# Define CNN model
 model = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(img_width, img_height, 3)),
-    MaxPooling2D((2, 2)),
-    Conv2D(64, (3, 3), activation='relu'),
-    MaxPooling2D((2, 2)),
-    Conv2D(128, (3, 3), activation='relu'),
-    MaxPooling2D((2, 2)),
-    Conv2D(128, (3, 3), activation='relu'),
-    MaxPooling2D((2, 2)),
+    Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=input_shape),
+    MaxPooling2D(pool_size=(2, 2)),
     Flatten(),
-    Dense(512, activation='relu'),
+    Dense(128, activation='relu'),
     Dense(1, activation='sigmoid')
 ])
 
-# Compile the model
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_test, y_test))
 
-# Train the model
-history = model.fit(
-    train_generator,
-    steps_per_epoch=train_generator.samples // batch_size,
-    epochs=10,
-    validation_data=val_generator,
-    validation_steps=val_generator.samples // batch_size
-)
+# Extract features using the trained CNN model
+cnn_features_train = model.predict(X_train)
+cnn_features_test = model.predict(X_test)
 
-# Save the model
-model.save(os.path.join(output_dir, 'panic_detection_model.h5'))
+# Train SVM classifier
+svm_classifier = svm.SVC(kernel='linear')
+svm_classifier.fit(cnn_features_train, y_train)
+
+# Evaluate SVM classifier
+svm_predictions = svm_classifier.predict(cnn_features_test)
+svm_accuracy = accuracy_score(y_test, svm_predictions)
+print("SVM Accuracy:", svm_accuracy)
+
+# Save models
+joblib.dump(svm_classifier, 'svm_model.joblib')
+model.save('cnn_model.h5')

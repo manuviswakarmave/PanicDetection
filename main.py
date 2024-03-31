@@ -31,7 +31,7 @@ def generate_motion_image(frame1, frame2):
     return motion_image
 
 # Create output folder if it doesn't exist
-output_folder = 'output'
+output_folder = 'processed_frames'
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
@@ -53,7 +53,7 @@ while True:
     motion_image = generate_motion_image(prev_frame, next_frame)
 
     # Save motion information image
-    output_path = os.path.join(output_folder, f"motion_image_{frame_count:04d}.jpg")
+    output_path = os.path.join(output_folder, f"panic_frame_{frame_count:04d}.jpg")
     cv2.imwrite(output_path, motion_image)
 
     # Update previous frame
