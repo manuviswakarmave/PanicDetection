@@ -7,7 +7,7 @@ def generate_motion_image(frame1, frame2):
     prev_gray = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
     next_gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
 
-    # Calculate optical flow using Lucas-Kanade method
+    # Calculate optical flow using Ferneback method
     flow = cv2.calcOpticalFlowFarneback(prev_gray, next_gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
 
     # Calculate magnitude and angle of flow vectors
